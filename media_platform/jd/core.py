@@ -75,6 +75,7 @@ class JdCrawler(AbstractCrawler):
                     comments = await client.get_comments(
                         product.sku_id,
                         config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+                        config.START_PAGE,
                         callback=jd_store.batch_update_jd_comments,
                     )
                     if client.last_stop_reason:

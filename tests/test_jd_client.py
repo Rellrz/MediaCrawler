@@ -96,11 +96,36 @@ def test_comment_pagination_stops_at_requested_count(monkeypatch):
         ]
     )
 
-    comments = asyncio.run(JdClient(page).get_comments("123", 15))
+    comments = asyncio.run(JdClient(page).get_comments("123", 15, 1))
 
     assert len(comments) == 15
     assert [call["pageNumber"] for call in page.calls] == [1, 2]
     assert sleep_delays == [3.0]
+
+
+def test_comment_pagination_starts_from_configured_page(monkeypatch):
+    async def no_sleep(_):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    page = FakePage(
+        [
+            comment_response(120, max_page=14),
+            comment_response(130, max_page=14),
+        ]
+    )
+
+    comments = asyncio.run(JdClient(page).get_comments("123", 20, 13))
+
+    assert len(comments) == 20
+    assert [call["pageNumber"] for call in page.calls] == [13, 14]
+
+
+def test_comment_pagination_rejects_invalid_start_page():
+    page = FakePage([])
+
+    with pytest.raises(ValueError, match="起始页"):
+        asyncio.run(JdClient(page).get_comments("123", 10, 0))
 
 
 def test_risk_control_stops_without_losing_stored_comments(monkeypatch):
@@ -126,6 +151,7 @@ def test_risk_control_stops_without_losing_stored_comments(monkeypatch):
         client.get_comments(
             "123",
             20,
+            1,
             callback=store_comments,
         )
     )
@@ -152,7 +178,7 @@ def test_transient_request_error_retries_with_exponential_backoff(monkeypatch):
         ]
     )
 
-    comments = asyncio.run(JdClient(page).get_comments("123", 10))
+    comments = asyncio.run(JdClient(page).get_comments("123", 10, 1))
 
     assert len(comments) == 10
     assert sleep_delays == [5.0, 10.0]
@@ -170,7 +196,7 @@ def test_batch_cooldown_is_added_every_five_pages(monkeypatch):
         [comment_response(index * 10, max_page=6) for index in range(6)]
     )
 
-    comments = asyncio.run(JdClient(page).get_comments("123", 60))
+    comments = asyncio.run(JdClient(page).get_comments("123", 60, 1))
 
     assert len(comments) == 60
     assert sleep_delays == [3.0, 3.0, 3.0, 3.0, 18.0]
@@ -180,7 +206,7 @@ def test_comment_api_verification_stops_safely():
     page = FakePage([{"code": "3", "message": "需要验证"}])
 
     client = JdClient(page)
-    comments = asyncio.run(client.get_comments("123", 10))
+    comments = asyncio.run(client.get_comments("123", 10, 1))
 
     assert comments == []
     assert "需要验证" in client.last_stop_reason
@@ -223,7 +249,7 @@ def test_http_error_keeps_api_domain_and_status():
     )
 
     client = JdClient(page)
-    comments = asyncio.run(client.get_comments("2943746", 10))
+    comments = asyncio.run(client.get_comments("2943746", 10, 1))
 
     assert comments == []
     assert "api.jingdonghealth.cn" in client.last_stop_reason

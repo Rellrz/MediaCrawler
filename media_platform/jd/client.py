@@ -294,17 +294,21 @@ class JdClient:
         self,
         sku_id: str,
         max_count: int,
+        start_page: int,
         callback: Optional[
             Callable[[str, List[Dict[str, Any]]], Awaitable[None]]
         ] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch comments page by page and persist each page before continuing."""
+        if start_page < 1:
+            raise ValueError("京东评论起始页必须大于等于 1")
         if max_count <= 0:
             return []
 
         self.last_stop_reason = None
         comments: List[Dict[str, Any]] = []
-        page_number = 1
+        page_number = start_page
+        fetched_page_count = 0
         while len(comments) < max_count:
             try:
                 response = await self._get_comment_page_with_retry(
@@ -341,6 +345,7 @@ class JdClient:
             if callback and valid_comments:
                 await callback(sku_id, valid_comments)
             comments.extend(valid_comments)
+            fetched_page_count += 1
 
             max_page = int(response.get("maxPage") or page_number)
             if (
@@ -351,7 +356,7 @@ class JdClient:
                 break
 
             request_delay = random.uniform(*self.PAGE_DELAY_RANGE)
-            if page_number % self.BATCH_SIZE_PAGES == 0:
+            if fetched_page_count % self.BATCH_SIZE_PAGES == 0:
                 request_delay += random.uniform(*self.BATCH_DELAY_RANGE)
             utils.logger.info(
                 f"[JdClient] 商品 {sku_id} 第 {page_number} 页已保存，"
