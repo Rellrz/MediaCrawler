@@ -64,6 +64,8 @@ class JdCrawler(AbstractCrawler):
             try:
                 self.context_page = await self.browser_context.new_page()
                 client = JdClient(self.context_page)
+                from store import jd as jd_store
+
                 for product_url in config.JD_SPECIFIED_PRODUCT_URL_LIST:
                     product = parse_jd_product_url(product_url)
                     utils.logger.info(
@@ -73,13 +75,18 @@ class JdCrawler(AbstractCrawler):
                     comments = await client.get_comments(
                         product.sku_id,
                         config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+                        callback=jd_store.batch_update_jd_comments,
                     )
-                    from store import jd as jd_store
-
-                    await jd_store.batch_update_jd_comments(product.sku_id, comments)
-                    utils.logger.info(
-                        f"[JdCrawler] 商品 {product.sku_id} 已保存 {len(comments)} 条评论"
-                    )
+                    if client.last_stop_reason:
+                        utils.logger.warning(
+                            f"[JdCrawler] 商品 {product.sku_id} 触发京东风控，"
+                            f"已安全保存 {len(comments)} 条评论，请稍后继续"
+                        )
+                    else:
+                        utils.logger.info(
+                            f"[JdCrawler] 商品 {product.sku_id} 已保存 "
+                            f"{len(comments)} 条评论"
+                        )
             except JdDataFetchError:
                 raise
             finally:

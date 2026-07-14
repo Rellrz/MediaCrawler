@@ -274,6 +274,10 @@ class ExcelStoreBase(AbstractStore):
         # Write data row
         self._write_row(self.comments_sheet, comment_item, headers)
 
+        # Persist every completed comment immediately so a later request failure
+        # cannot discard comments already returned by the platform.
+        self.workbook.save(self.filename)
+
         utils.logger.info(f"[ExcelStoreBase] Stored comment to Excel: {comment_item.get('comment_id', 'N/A')}")
 
     async def store_creator(self, creator: Dict):

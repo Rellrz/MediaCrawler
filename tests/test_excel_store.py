@@ -110,6 +110,11 @@ class TestExcelStoreBase:
         assert excel_store.comments_sheet.max_row == 2  # Header + 1 data row
         assert excel_store.comments_headers_written is True
 
+        assert excel_store.filename.exists()
+        workbook = openpyxl.load_workbook(excel_store.filename)
+        assert workbook["Comments"].cell(row=2, column=1).value == "comment123"
+        workbook.close()
+
     @pytest.mark.asyncio
     async def test_store_creator(self, excel_store):
         """Test storing creator data"""

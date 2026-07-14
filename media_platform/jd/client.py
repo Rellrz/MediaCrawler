@@ -6,18 +6,29 @@
 # Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
 
 import asyncio
-from typing import Any, Dict, List
+import random
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 from playwright.async_api import Page
+
+from tools import utils
 
 
 class JdDataFetchError(RuntimeError):
     """Raised when JD rejects or cannot complete a comment request."""
 
 
+class JdRiskControlError(JdDataFetchError):
+    """Raised when JD blocks the current browser session or request rate."""
+
+
 class JdClient:
     PAGE_SIZE = 10
+    PAGE_DELAY_RANGE = (3.0, 8.0)
+    BATCH_SIZE_PAGES = 5
+    BATCH_DELAY_RANGE = (15.0, 30.0)
+    MAX_TRANSIENT_RETRIES = 2
     COMMENT_API_BY_HOST = {
         "item.jd.com": "https://api.m.jd.com",
         "item.jingdonghealth.cn": "https://api.jingdonghealth.cn",
@@ -25,6 +36,67 @@ class JdClient:
 
     def __init__(self, page: Page) -> None:
         self.page = page
+        self.last_stop_reason: Optional[str] = None
+
+    @staticmethod
+    def _is_risk_control_error(error: BaseException) -> bool:
+        message = str(error).lower()
+        return any(
+            marker in message
+            for marker in (
+                "http 403",
+                "http 429",
+                "验证码",
+                "需要验证",
+                "访问过于频繁",
+                "风险",
+            )
+        )
+
+    @staticmethod
+    def _is_transient_error(error: BaseException) -> bool:
+        message = str(error).lower()
+        return any(
+            marker in message
+            for marker in (
+                "timeout",
+                "timed out",
+                "net::err_",
+                "http 500",
+                "http 502",
+                "http 503",
+                "http 504",
+            )
+        )
+
+    async def _get_comment_page_with_retry(
+        self, sku_id: str, page_number: int
+    ) -> Dict[str, Any]:
+        for attempt in range(self.MAX_TRANSIENT_RETRIES + 1):
+            try:
+                return await self.get_comment_page(sku_id, page_number)
+            except Exception as exc:
+                if self._is_risk_control_error(exc):
+                    raise JdRiskControlError(str(exc)) from exc
+                if isinstance(exc, JdDataFetchError):
+                    raise
+                if (
+                    not self._is_transient_error(exc)
+                    or attempt == self.MAX_TRANSIENT_RETRIES
+                ):
+                    raise JdDataFetchError(f"京东评论请求失败：{exc}") from exc
+
+                retry_delay = random.uniform(
+                    5.0 * (2**attempt),
+                    10.0 * (2**attempt),
+                )
+                utils.logger.warning(
+                    f"[JdClient] 商品 {sku_id} 第 {page_number} 页请求异常，"
+                    f"{retry_delay:.1f} 秒后进行第 {attempt + 1} 次重试"
+                )
+                await asyncio.sleep(retry_delay)
+
+        raise JdDataFetchError("京东评论请求重试状态异常")
 
     async def get_comment_page(self, sku_id: str, page_number: int) -> Dict[str, Any]:
         """Fetch one signed comment page from the current JD product page."""
@@ -218,34 +290,74 @@ class JdClient:
             "commentInfoList": comments,
         }
 
-    async def get_comments(self, sku_id: str, max_count: int) -> List[Dict[str, Any]]:
-        """Fetch at most ``max_count`` comments, following JD pagination."""
+    async def get_comments(
+        self,
+        sku_id: str,
+        max_count: int,
+        callback: Optional[
+            Callable[[str, List[Dict[str, Any]]], Awaitable[None]]
+        ] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch comments page by page and persist each page before continuing."""
         if max_count <= 0:
             return []
 
+        self.last_stop_reason = None
         comments: List[Dict[str, Any]] = []
         page_number = 1
         while len(comments) < max_count:
             try:
-                response = await self.get_comment_page(sku_id, page_number)
-            except JdDataFetchError:
-                raise
-            except Exception as exc:
-                raise JdDataFetchError(f"京东评论请求失败：{exc}") from exc
+                response = await self._get_comment_page_with_retry(
+                    sku_id, page_number
+                )
+            except JdRiskControlError as exc:
+                self.last_stop_reason = str(exc)
+                utils.logger.warning(
+                    f"[JdClient] 商品 {sku_id} 第 {page_number} 页触发京东风控，"
+                    f"已安全保留 {len(comments)} 条评论，停止继续请求"
+                )
+                break
 
             if str(response.get("code")) != "0":
                 message = response.get("message") or response.get("msg") or "未知错误"
+                error = JdDataFetchError(f"京东评论接口拒绝请求：{message}")
+                if self._is_risk_control_error(error):
+                    self.last_stop_reason = str(error)
+                    utils.logger.warning(
+                        f"[JdClient] 商品 {sku_id} 第 {page_number} 页触发京东风控，"
+                        f"已安全保留 {len(comments)} 条评论，停止继续请求"
+                    )
+                    break
                 raise JdDataFetchError(f"京东评论接口拒绝请求：{message}")
 
             page_comments = response.get("commentInfoList") or []
             if not isinstance(page_comments, list):
                 raise JdDataFetchError("京东评论列表格式异常")
-            comments.extend(item for item in page_comments if isinstance(item, dict))
+            valid_comments = [
+                item for item in page_comments if isinstance(item, dict)
+            ]
+            remaining_count = max_count - len(comments)
+            valid_comments = valid_comments[:remaining_count]
+            if callback and valid_comments:
+                await callback(sku_id, valid_comments)
+            comments.extend(valid_comments)
 
             max_page = int(response.get("maxPage") or page_number)
-            if not page_comments or page_number >= max_page:
+            if (
+                not page_comments
+                or page_number >= max_page
+                or len(comments) >= max_count
+            ):
                 break
+
+            request_delay = random.uniform(*self.PAGE_DELAY_RANGE)
+            if page_number % self.BATCH_SIZE_PAGES == 0:
+                request_delay += random.uniform(*self.BATCH_DELAY_RANGE)
+            utils.logger.info(
+                f"[JdClient] 商品 {sku_id} 第 {page_number} 页已保存，"
+                f"等待 {request_delay:.1f} 秒后继续"
+            )
+            await asyncio.sleep(request_delay)
             page_number += 1
-            await asyncio.sleep(1)
 
         return comments[:max_count]

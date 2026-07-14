@@ -82,10 +82,13 @@ def test_reject_non_standard_jd_product_url(url):
 
 
 def test_comment_pagination_stops_at_requested_count(monkeypatch):
-    async def no_sleep(_):
-        return None
+    sleep_delays = []
 
-    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    async def record_sleep(delay):
+        sleep_delays.append(delay)
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    monkeypatch.setattr("media_platform.jd.client.random.uniform", lambda low, high: low)
     page = FakePage(
         [
             comment_response(0),
@@ -97,13 +100,90 @@ def test_comment_pagination_stops_at_requested_count(monkeypatch):
 
     assert len(comments) == 15
     assert [call["pageNumber"] for call in page.calls] == [1, 2]
+    assert sleep_delays == [3.0]
 
 
-def test_comment_api_error_is_reported():
+def test_risk_control_stops_without_losing_stored_comments(monkeypatch):
+    async def no_sleep(_):
+        return None
+
+    stored_comments = []
+
+    async def store_comments(sku_id, comments):
+        for comment in comments:
+            stored_comments.append((sku_id, comment["guid"]))
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    page = FakePage(
+        [
+            comment_response(0),
+            RuntimeError("HTTP 403"),
+        ]
+    )
+
+    client = JdClient(page)
+    comments = asyncio.run(
+        client.get_comments(
+            "123",
+            20,
+            callback=store_comments,
+        )
+    )
+
+    assert len(comments) == 10
+    assert stored_comments == [("123", str(index)) for index in range(10)]
+    assert client.last_stop_reason == "HTTP 403"
+    assert [call["pageNumber"] for call in page.calls] == [1, 2]
+
+
+def test_transient_request_error_retries_with_exponential_backoff(monkeypatch):
+    sleep_delays = []
+
+    async def record_sleep(delay):
+        sleep_delays.append(delay)
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    monkeypatch.setattr("media_platform.jd.client.random.uniform", lambda low, high: low)
+    page = FakePage(
+        [
+            RuntimeError("request timeout"),
+            RuntimeError("HTTP 502"),
+            comment_response(0, max_page=1),
+        ]
+    )
+
+    comments = asyncio.run(JdClient(page).get_comments("123", 10))
+
+    assert len(comments) == 10
+    assert sleep_delays == [5.0, 10.0]
+
+
+def test_batch_cooldown_is_added_every_five_pages(monkeypatch):
+    sleep_delays = []
+
+    async def record_sleep(delay):
+        sleep_delays.append(delay)
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    monkeypatch.setattr("media_platform.jd.client.random.uniform", lambda low, high: low)
+    page = FakePage(
+        [comment_response(index * 10, max_page=6) for index in range(6)]
+    )
+
+    comments = asyncio.run(JdClient(page).get_comments("123", 60))
+
+    assert len(comments) == 60
+    assert sleep_delays == [3.0, 3.0, 3.0, 3.0, 18.0]
+
+
+def test_comment_api_verification_stops_safely():
     page = FakePage([{"code": "3", "message": "需要验证"}])
 
-    with pytest.raises(JdDataFetchError, match="需要验证"):
-        asyncio.run(JdClient(page).get_comments("123", 10))
+    client = JdClient(page)
+    comments = asyncio.run(client.get_comments("123", 10))
+
+    assert comments == []
+    assert "需要验证" in client.last_stop_reason
 
 
 def test_standard_jd_page_uses_standard_comment_api():
@@ -142,10 +222,12 @@ def test_http_error_keeps_api_domain_and_status():
         url="https://item.jingdonghealth.cn/2943746.html",
     )
 
-    with pytest.raises(
-        JdDataFetchError, match=r"api\.jingdonghealth\.cn.*HTTP 403"
-    ):
-        asyncio.run(JdClient(page).get_comments("2943746", 10))
+    client = JdClient(page)
+    comments = asyncio.run(client.get_comments("2943746", 10))
+
+    assert comments == []
+    assert "api.jingdonghealth.cn" in client.last_stop_reason
+    assert "HTTP 403" in client.last_stop_reason
 
 
 def test_product_page_load_error_has_actionable_message():
