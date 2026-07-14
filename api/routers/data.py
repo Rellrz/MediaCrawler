@@ -28,6 +28,7 @@ router = APIRouter(prefix="/data", tags=["data"])
 
 # Data directory
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
+SUPPORTED_EXTENSIONS = {".json", ".csv", ".xlsx", ".xls"}
 
 
 def get_file_info(file_path: Path) -> dict:
@@ -65,13 +66,11 @@ async def list_data_files(platform: Optional[str] = None, file_type: Optional[st
         return {"files": []}
 
     files = []
-    supported_extensions = {".json", ".csv", ".xlsx", ".xls"}
-
     for root, dirs, filenames in os.walk(DATA_DIR):
         root_path = Path(root)
         for filename in filenames:
             file_path = root_path / filename
-            if file_path.suffix.lower() not in supported_extensions:
+            if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
                 continue
 
             # Platform filter
@@ -93,6 +92,28 @@ async def list_data_files(platform: Optional[str] = None, file_type: Optional[st
     files.sort(key=lambda x: x["modified_at"], reverse=True)
 
     return {"files": files}
+
+
+@router.delete("/files/{file_path:path}")
+async def delete_data_file(file_path: str):
+    """Permanently delete one supported data file within DATA_DIR."""
+    data_dir = DATA_DIR.resolve()
+    full_path = (DATA_DIR / file_path).resolve()
+
+    try:
+        full_path.relative_to(data_dir)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    if not full_path.is_file():
+        raise HTTPException(status_code=400, detail="Not a file")
+    if full_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    full_path.unlink()
+    return {"success": True, "path": str(full_path.relative_to(data_dir))}
 
 
 @router.get("/files/{file_path:path}")
@@ -200,13 +221,11 @@ async def get_data_stats():
         "by_type": {}
     }
 
-    supported_extensions = {".json", ".csv", ".xlsx", ".xls"}
-
     for root, dirs, filenames in os.walk(DATA_DIR):
         root_path = Path(root)
         for filename in filenames:
             file_path = root_path / filename
-            if file_path.suffix.lower() not in supported_extensions:
+            if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
                 continue
 
             try:
