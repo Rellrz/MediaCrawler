@@ -40,6 +40,7 @@ from media_platform.bilibili import BilibiliCrawler
 from media_platform.douyin import DouYinCrawler
 from media_platform.jd import JdCrawler
 from media_platform.kuaishou import KuaishouCrawler
+from media_platform.taobao import TaobaoCrawler
 from media_platform.tieba import TieBaCrawler
 from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
@@ -54,6 +55,7 @@ class CrawlerFactory:
         "dy": DouYinCrawler,
         "ks": KuaishouCrawler,
         "jd": JdCrawler,
+        "tb": TaobaoCrawler,
         "bili": BilibiliCrawler,
         "wb": WeiboCrawler,
         "tieba": TieBaCrawler,

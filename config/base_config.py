@@ -18,7 +18,7 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 # Basic configuration
-PLATFORM = "xhs"  # Platform, xhs | dy | ks | bili | wb | tieba | zhihu | jd
+PLATFORM = "xhs"  # Platform, xhs | dy | ks | bili | wb | tieba | zhihu | jd | tb
 
 # 是否使用海外版小红书 (rednote.com)
 # 开启后 API 走 webapi.rednote.com，cookie 域使用 .rednote.com
@@ -111,6 +111,9 @@ CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 10
 
 # Standard JD product URLs used by detail mode.
 JD_SPECIFIED_PRODUCT_URL_LIST = []
+
+# Standard Taobao product URLs used by detail mode.
+TB_SPECIFIED_PRODUCT_URL_LIST = []
 
 # Whether to enable the mode of crawling second-level comments. By default, crawling of second-level comments is not enabled.
 # If the old version of the project uses db, you need to refer to schema/tables.sql line 287 to add table fields.
