@@ -221,6 +221,7 @@ class CrawlerManager:
 
         if config.start_page != 1:
             cmd.extend(["--start", str(config.start_page)])
+        cmd.extend(["--max_notes_count", str(config.max_notes_count)])
 
         cmd.extend(["--get_comment", "true" if config.enable_comments else "false"])
         cmd.extend(["--get_sub_comment", "true" if config.enable_sub_comments else "false"])

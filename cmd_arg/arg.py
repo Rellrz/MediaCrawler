@@ -174,6 +174,15 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 rich_help_panel="Basic Configuration",
             ),
         ] = config.START_PAGE,
+        max_notes_count: Annotated[
+            int,
+            typer.Option(
+                "--max_notes_count",
+                min=1,
+                help="Maximum number of posts/videos to crawl per keyword",
+                rich_help_panel="Basic Configuration",
+            ),
+        ] = config.CRAWLER_MAX_NOTES_COUNT,
         keywords: Annotated[
             str,
             typer.Option(
@@ -318,6 +327,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.LOGIN_TYPE = lt.value
         config.CRAWLER_TYPE = crawler_type.value
         config.START_PAGE = start
+        config.CRAWLER_MAX_NOTES_COUNT = max_notes_count
         config.KEYWORDS = keywords
         config.ENABLE_GET_COMMENTS = enable_comment
         config.ENABLE_GET_SUB_COMMENTS = enable_sub_comment
@@ -362,6 +372,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             lt=config.LOGIN_TYPE,
             type=config.CRAWLER_TYPE,
             start=config.START_PAGE,
+            max_notes_count=config.CRAWLER_MAX_NOTES_COUNT,
             keywords=config.KEYWORDS,
             get_comment=config.ENABLE_GET_COMMENTS,
             get_sub_comment=config.ENABLE_GET_SUB_COMMENTS,
