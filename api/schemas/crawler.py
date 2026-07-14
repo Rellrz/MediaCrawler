@@ -30,6 +30,7 @@ class PlatformEnum(str, Enum):
     WEIBO = "wb"
     TIEBA = "tieba"
     ZHIHU = "zhihu"
+    JD = "jd"
 
 
 class LoginTypeEnum(str, Enum):
@@ -67,6 +68,7 @@ class CrawlerStartRequest(BaseModel):
     creator_ids: str = ""  # Creator ID list for creator mode, comma-separated
     start_page: int = 1
     max_notes_count: int = Field(ge=1)
+    max_comments_count: int = Field(default=10, ge=1)
     enable_comments: bool = True
     enable_sub_comments: bool = False
     save_option: SaveDataOptionEnum = SaveDataOptionEnum.JSONL

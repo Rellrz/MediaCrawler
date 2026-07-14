@@ -46,6 +46,7 @@ class PlatformEnum(str, Enum):
     WEIBO = "wb"
     TIEBA = "tieba"
     ZHIHU = "zhihu"
+    JD = "jd"
 
 
 class LoginTypeEnum(str, Enum):
@@ -146,7 +147,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             PlatformEnum,
             typer.Option(
                 "--platform",
-                help="Media platform selection (xhs=XiaoHongShu | dy=Douyin | ks=Kuaishou | bili=Bilibili | wb=Weibo | tieba=Baidu Tieba | zhihu=Zhihu)",
+                help="Media platform selection (xhs=XiaoHongShu | dy=Douyin | ks=Kuaishou | bili=Bilibili | wb=Weibo | tieba=Baidu Tieba | zhihu=Zhihu | jd=JD)",
                 rich_help_panel="Basic Configuration",
             ),
         ] = _coerce_enum(PlatformEnum, config.PLATFORM, PlatformEnum.XHS),
@@ -264,6 +265,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             int,
             typer.Option(
                 "--max_comments_count_singlenotes",
+                min=1,
                 help="Maximum number of first-level comments to crawl per post/video",
                 rich_help_panel="Comment Configuration",
             ),
@@ -354,6 +356,8 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 config.WEIBO_SPECIFIED_ID_LIST = specified_id_list
             elif platform == PlatformEnum.KUAISHOU:
                 config.KS_SPECIFIED_ID_LIST = specified_id_list
+            elif platform == PlatformEnum.JD:
+                config.JD_SPECIFIED_PRODUCT_URL_LIST = specified_id_list
 
         if creator_id_list:
             if platform == PlatformEnum.XHS:
@@ -382,6 +386,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             cookies=config.COOKIES,
             specified_id=specified_id,
             creator_id=creator_id,
+            max_comments_count_singlenotes=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
         )
 
     command = typer.main.get_command(app)
