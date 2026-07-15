@@ -32,7 +32,6 @@ Provides Excel export functionality for crawled data with formatted sheets
 """
 
 import threading
-from datetime import datetime
 from typing import Dict, List, Any
 from pathlib import Path
 
@@ -46,6 +45,7 @@ except ImportError:
 
 from base.base_crawler import AbstractStore
 from tools import utils
+from tools.file_naming import build_data_filename, normalize_data_type
 import config
 
 
@@ -118,31 +118,38 @@ class ExcelStoreBase(AbstractStore):
             self.data_dir = Path("data") / platform
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
-        # Initialize workbook
-        self.workbook = openpyxl.Workbook()
-        self.workbook.remove(self.workbook.active)  # Remove default sheet
+        self.workbooks: Dict[str, Any] = {}
+        self.sheets: Dict[str, Any] = {}
+        self.headers_written: set[str] = set()
+        self.filenames = {
+            data_type: self.data_dir
+            / build_data_filename(platform, crawler_type, data_type, "xlsx")
+            for data_type in ("content", "comment")
+        }
 
-        # Create sheets
-        self.contents_sheet = self.workbook.create_sheet("Contents")
-        self.comments_sheet = self.workbook.create_sheet("Comments")
-        self.creators_sheet = self.workbook.create_sheet("Creators")
+        utils.logger.info(
+            f"[ExcelStoreBase] Initialized Excel export: {self.filenames}"
+        )
 
-        # Track if headers are written
-        self.contents_headers_written = False
-        self.comments_headers_written = False
-        self.creators_headers_written = False
-        self.contacts_headers_written = False
-        self.dynamics_headers_written = False
+    def get_filename(self, item_type: str) -> Path:
+        """Return the content or comment workbook path for this run."""
+        return self.filenames[normalize_data_type(item_type)]
 
-        # Optional sheets for platforms that need them (e.g., Bilibili)
-        self.contacts_sheet = None
-        self.dynamics_sheet = None
-
-        # Generate filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.filename = self.data_dir / f"{platform}_{crawler_type}_{timestamp}.xlsx"
-
-        utils.logger.info(f"[ExcelStoreBase] Initialized Excel export to: {self.filename}")
+    def _get_sheet(self, item_type: str, sheet_name: str):
+        """Create a workbook and sheet lazily for one normalized data type."""
+        data_type = normalize_data_type(item_type)
+        workbook = self.workbooks.get(data_type)
+        if workbook is None:
+            workbook = openpyxl.Workbook()
+            workbook.active.title = sheet_name
+            self.workbooks[data_type] = workbook
+            sheet = workbook.active
+        elif sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+        else:
+            sheet = workbook.create_sheet(sheet_name)
+        self.sheets[sheet_name] = sheet
+        return sheet
 
     def _apply_header_style(self, sheet, row_num: int = 1):
         """
@@ -241,16 +248,14 @@ class ExcelStoreBase(AbstractStore):
         Args:
             content_item: Content data dictionary
         """
-        # Define headers (customize based on platform)
+        sheet = self._get_sheet("content", "Contents")
         headers = list(content_item.keys())
 
-        # Write headers if first time
-        if not self.contents_headers_written:
-            self._write_headers(self.contents_sheet, headers)
-            self.contents_headers_written = True
+        if "Contents" not in self.headers_written:
+            self._write_headers(sheet, headers)
+            self.headers_written.add("Contents")
 
-        # Write data row
-        self._write_row(self.contents_sheet, content_item, headers)
+        self._write_row(sheet, content_item, headers)
 
         # Get ID from various possible field names
         content_id = content_item.get('note_id') or content_item.get('aweme_id') or content_item.get('video_id') or content_item.get('content_id') or 'N/A'
@@ -263,20 +268,18 @@ class ExcelStoreBase(AbstractStore):
         Args:
             comment_item: Comment data dictionary
         """
-        # Define headers
+        sheet = self._get_sheet("comment", "Comments")
         headers = list(comment_item.keys())
 
-        # Write headers if first time
-        if not self.comments_headers_written:
-            self._write_headers(self.comments_sheet, headers)
-            self.comments_headers_written = True
+        if "Comments" not in self.headers_written:
+            self._write_headers(sheet, headers)
+            self.headers_written.add("Comments")
 
-        # Write data row
-        self._write_row(self.comments_sheet, comment_item, headers)
+        self._write_row(sheet, comment_item, headers)
 
         # Persist every completed comment immediately so a later request failure
         # cannot discard comments already returned by the platform.
-        self.workbook.save(self.filename)
+        self.workbooks["comment"].save(self.filenames["comment"])
 
         utils.logger.info(f"[ExcelStoreBase] Stored comment to Excel: {comment_item.get('comment_id', 'N/A')}")
 
@@ -287,16 +290,14 @@ class ExcelStoreBase(AbstractStore):
         Args:
             creator: Creator data dictionary
         """
-        # Define headers
+        sheet = self._get_sheet("content", "Creators")
         headers = list(creator.keys())
 
-        # Write headers if first time
-        if not self.creators_headers_written:
-            self._write_headers(self.creators_sheet, headers)
-            self.creators_headers_written = True
+        if "Creators" not in self.headers_written:
+            self._write_headers(sheet, headers)
+            self.headers_written.add("Creators")
 
-        # Write data row
-        self._write_row(self.creators_sheet, creator, headers)
+        self._write_row(sheet, creator, headers)
 
         utils.logger.info(f"[ExcelStoreBase] Stored creator to Excel: {creator.get('user_id', 'N/A')}")
 
@@ -307,20 +308,14 @@ class ExcelStoreBase(AbstractStore):
         Args:
             contact_item: Contact data dictionary
         """
-        # Create contacts sheet if not exists
-        if self.contacts_sheet is None:
-            self.contacts_sheet = self.workbook.create_sheet("Contacts")
-
-        # Define headers
+        sheet = self._get_sheet("content", "Contacts")
         headers = list(contact_item.keys())
 
-        # Write headers if first time
-        if not self.contacts_headers_written:
-            self._write_headers(self.contacts_sheet, headers)
-            self.contacts_headers_written = True
+        if "Contacts" not in self.headers_written:
+            self._write_headers(sheet, headers)
+            self.headers_written.add("Contacts")
 
-        # Write data row
-        self._write_row(self.contacts_sheet, contact_item, headers)
+        self._write_row(sheet, contact_item, headers)
 
         utils.logger.info(f"[ExcelStoreBase] Stored contact to Excel: up_id={contact_item.get('up_id', 'N/A')}, fan_id={contact_item.get('fan_id', 'N/A')}")
 
@@ -331,20 +326,14 @@ class ExcelStoreBase(AbstractStore):
         Args:
             dynamic_item: Dynamic data dictionary
         """
-        # Create dynamics sheet if not exists
-        if self.dynamics_sheet is None:
-            self.dynamics_sheet = self.workbook.create_sheet("Dynamics")
-
-        # Define headers
+        sheet = self._get_sheet("content", "Dynamics")
         headers = list(dynamic_item.keys())
 
-        # Write headers if first time
-        if not self.dynamics_headers_written:
-            self._write_headers(self.dynamics_sheet, headers)
-            self.dynamics_headers_written = True
+        if "Dynamics" not in self.headers_written:
+            self._write_headers(sheet, headers)
+            self.headers_written.add("Dynamics")
 
-        # Write data row
-        self._write_row(self.dynamics_sheet, dynamic_item, headers)
+        self._write_row(sheet, dynamic_item, headers)
 
         utils.logger.info(f"[ExcelStoreBase] Stored dynamic to Excel: {dynamic_item.get('dynamic_id', 'N/A')}")
 
@@ -353,35 +342,20 @@ class ExcelStoreBase(AbstractStore):
         Save workbook to file
         """
         try:
-            # Auto-adjust column widths for all sheets
-            self._auto_adjust_column_width(self.contents_sheet)
-            self._auto_adjust_column_width(self.comments_sheet)
-            self._auto_adjust_column_width(self.creators_sheet)
-            if self.contacts_sheet is not None:
-                self._auto_adjust_column_width(self.contacts_sheet)
-            if self.dynamics_sheet is not None:
-                self._auto_adjust_column_width(self.dynamics_sheet)
-
-            # Remove empty sheets (only header row)
-            if self.contents_sheet.max_row == 1:
-                self.workbook.remove(self.contents_sheet)
-            if self.comments_sheet.max_row == 1:
-                self.workbook.remove(self.comments_sheet)
-            if self.creators_sheet.max_row == 1:
-                self.workbook.remove(self.creators_sheet)
-            if self.contacts_sheet is not None and self.contacts_sheet.max_row == 1:
-                self.workbook.remove(self.contacts_sheet)
-            if self.dynamics_sheet is not None and self.dynamics_sheet.max_row == 1:
-                self.workbook.remove(self.dynamics_sheet)
-
-            # Check if there are any sheets left
-            if len(self.workbook.sheetnames) == 0:
-                utils.logger.info(f"[ExcelStoreBase] No data to save, skipping file creation: {self.filename}")
+            if not self.workbooks:
+                utils.logger.info(
+                    "[ExcelStoreBase] No data to save, skipping file creation"
+                )
                 return
 
-            # Save workbook
-            self.workbook.save(self.filename)
-            utils.logger.info(f"[ExcelStoreBase] Excel file saved successfully: {self.filename}")
+            for data_type, workbook in self.workbooks.items():
+                for sheet in workbook.worksheets:
+                    self._auto_adjust_column_width(sheet)
+                filename = self.filenames[data_type]
+                workbook.save(filename)
+                utils.logger.info(
+                    f"[ExcelStoreBase] Excel file saved successfully: {filename}"
+                )
 
         except Exception as e:
             utils.logger.error(f"[ExcelStoreBase] Error saving Excel file: {e}")

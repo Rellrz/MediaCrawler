@@ -24,6 +24,7 @@ import pathlib
 from typing import Dict, List
 import aiofiles
 import config
+from tools.file_naming import build_data_file_stem, build_data_filename
 from tools.utils import utils
 from tools.words import AsyncWordCloudGenerator
 
@@ -40,7 +41,12 @@ class AsyncFileWriter:
         else:
             base_path = f"data/{self.platform}/{file_type}"
         pathlib.Path(base_path).mkdir(parents=True, exist_ok=True)
-        file_name = f"{self.crawler_type}_{item_type}_{utils.get_current_date()}.{file_type}"
+        file_name = build_data_filename(
+            self.platform,
+            self.crawler_type,
+            item_type,
+            file_type,
+        )
         return f"{base_path}/{file_name}"
 
     async def write_to_csv(self, item: Dict, item_type: str):
@@ -137,7 +143,10 @@ class AsyncFileWriter:
             else:
                 words_base_path = f"data/{self.platform}/words"
             pathlib.Path(words_base_path).mkdir(parents=True, exist_ok=True)
-            words_file_prefix = f"{words_base_path}/{self.crawler_type}_comments_{utils.get_current_date()}"
+            words_file_prefix = (
+                f"{words_base_path}/"
+                f"{build_data_file_stem(self.platform, self.crawler_type, 'comments')}"
+            )
 
             utils.logger.info(f"[AsyncFileWriter.generate_wordcloud_from_comments] Generating wordcloud from {len(filtered_data)} comments")
             await self.wordcloud_generator.generate_word_frequency_and_cloud(filtered_data, words_file_prefix)

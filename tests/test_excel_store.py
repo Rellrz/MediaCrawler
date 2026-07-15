@@ -68,10 +68,14 @@ class TestExcelStoreBase:
         """Test Excel store initialization"""
         assert excel_store.platform == "test"
         assert excel_store.crawler_type == "search"
-        assert excel_store.workbook is not None
-        assert excel_store.contents_sheet is not None
-        assert excel_store.comments_sheet is not None
-        assert excel_store.creators_sheet is not None
+        assert excel_store.workbooks == {}
+        assert set(excel_store.filenames) == {"content", "comment"}
+        assert excel_store.get_filename("contents").name.startswith(
+            "test_search_content_"
+        )
+        assert excel_store.get_filename("comments").name.startswith(
+            "test_search_comment_"
+        )
 
     @pytest.mark.asyncio
     async def test_store_content(self, excel_store):
@@ -89,8 +93,8 @@ class TestExcelStoreBase:
         await excel_store.store_content(content_item)
 
         # Verify data was written
-        assert excel_store.contents_sheet.max_row == 2  # Header + 1 data row
-        assert excel_store.contents_headers_written is True
+        assert excel_store.sheets["Contents"].max_row == 2
+        assert "Contents" in excel_store.headers_written
 
     @pytest.mark.asyncio
     async def test_store_comment(self, excel_store):
@@ -107,11 +111,12 @@ class TestExcelStoreBase:
         await excel_store.store_comment(comment_item)
 
         # Verify data was written
-        assert excel_store.comments_sheet.max_row == 2  # Header + 1 data row
-        assert excel_store.comments_headers_written is True
+        assert excel_store.sheets["Comments"].max_row == 2
+        assert "Comments" in excel_store.headers_written
 
-        assert excel_store.filename.exists()
-        workbook = openpyxl.load_workbook(excel_store.filename)
+        filename = excel_store.get_filename("comment")
+        assert filename.exists()
+        workbook = openpyxl.load_workbook(filename)
         assert workbook["Comments"].cell(row=2, column=1).value == "comment123"
         workbook.close()
 
@@ -129,8 +134,8 @@ class TestExcelStoreBase:
         await excel_store.store_creator(creator_item)
 
         # Verify data was written
-        assert excel_store.creators_sheet.max_row == 2  # Header + 1 data row
-        assert excel_store.creators_headers_written is True
+        assert excel_store.sheets["Creators"].max_row == 2
+        assert "Creators" in excel_store.headers_written
 
     @pytest.mark.asyncio
     async def test_multiple_items(self, excel_store):
@@ -144,7 +149,7 @@ class TestExcelStoreBase:
             })
 
         # Verify all items were stored
-        assert excel_store.contents_sheet.max_row == 6  # Header + 5 data rows
+        assert excel_store.sheets["Contents"].max_row == 6
 
     def test_flush(self, excel_store):
         """Test flushing data to file"""
@@ -158,10 +163,11 @@ class TestExcelStoreBase:
         excel_store.flush()
 
         # Verify file was created
-        assert excel_store.filename.exists()
+        filename = excel_store.get_filename("content")
+        assert filename.exists()
 
         # Verify file can be opened
-        wb = openpyxl.load_workbook(excel_store.filename)
+        wb = openpyxl.load_workbook(filename)
         assert "Contents" in wb.sheetnames
         wb.close()
 
@@ -170,7 +176,7 @@ class TestExcelStoreBase:
         asyncio.run(excel_store.store_content({"note_id": "test", "title": "Test"}))
 
         # Check header formatting
-        header_cell = excel_store.contents_sheet.cell(row=1, column=1)
+        header_cell = excel_store.sheets["Contents"].cell(row=1, column=1)
         assert header_cell.font.bold is True
         # RGB color may have different prefix (00 or FF), check the actual color part
         assert header_cell.fill.start_color.rgb[-6:] == "366092"
@@ -183,13 +189,32 @@ class TestExcelStoreBase:
         excel_store.flush()
 
         # Reload workbook
-        wb = openpyxl.load_workbook(excel_store.filename)
+        wb = openpyxl.load_workbook(excel_store.get_filename("content"))
 
         # Only Contents sheet should exist
         assert "Contents" in wb.sheetnames
         assert "Comments" not in wb.sheetnames
         assert "Creators" not in wb.sheetnames
         wb.close()
+
+    @pytest.mark.asyncio
+    async def test_content_and_comments_use_separate_files(self, excel_store):
+        await excel_store.store_content({"note_id": "note1"})
+        await excel_store.store_comment({"comment_id": "comment1"})
+        excel_store.flush()
+
+        content_filename = excel_store.get_filename("content")
+        comment_filename = excel_store.get_filename("comment")
+        assert content_filename != comment_filename
+        assert content_filename.exists()
+        assert comment_filename.exists()
+
+        content_workbook = openpyxl.load_workbook(content_filename)
+        comment_workbook = openpyxl.load_workbook(comment_filename)
+        assert content_workbook.sheetnames == ["Contents"]
+        assert comment_workbook.sheetnames == ["Comments"]
+        content_workbook.close()
+        comment_workbook.close()
 
 
 @pytest.mark.skipif(not EXCEL_AVAILABLE, reason="openpyxl not installed")
@@ -245,7 +270,7 @@ class TestSingletonPattern:
 
         # Verify both items are in the same workbook
         assert store1 is store2
-        assert store1.contents_sheet.max_row == 3  # Header + 2 data rows
+        assert store1.sheets["Contents"].max_row == 3
 
     def test_flush_all_saves_all_instances(self, tmp_path):
         """Test that flush_all saves all instances"""
@@ -264,8 +289,8 @@ class TestSingletonPattern:
         assert len(ExcelStoreBase._instances) == 0
 
         # Verify files were created
-        assert store1.filename.exists()
-        assert store2.filename.exists()
+        assert store1.get_filename("content").exists()
+        assert store2.get_filename("content").exists()
 
     def test_flush_all_clears_instances(self):
         """Test that flush_all clears the instances dictionary"""
