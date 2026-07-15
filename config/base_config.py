@@ -109,6 +109,19 @@ ENABLE_GET_COMMENTS = True
 # Control the number of crawled first-level comments (single video/post)
 CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 10
 
+# Random delay between storing individual comments, in seconds.
+COMMENT_INTERVAL_MIN = 0.0
+COMMENT_INTERVAL_MAX = 0.0
+
+# Random delay after finishing a comment page, in seconds.
+PAGE_INTERVAL_MIN = 2.0
+PAGE_INTERVAL_MAX = 5.0
+
+# Replace the normal page delay with a longer pause after this many pages.
+PERIODIC_PAUSE_PAGE_COUNT = 5
+PERIODIC_PAUSE_MIN = 20.0
+PERIODIC_PAUSE_MAX = 40.0
+
 # Standard JD product URLs used by detail mode.
 JD_SPECIFIED_PRODUCT_URL_LIST = []
 

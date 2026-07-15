@@ -41,6 +41,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import zhihu as zhihu_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.comment_crawl_throttle import create_comment_page_callback
 from var import crawler_type_var, source_keyword_var
 
 from .client import ZhiHuClient
@@ -233,14 +234,12 @@ class ZhihuCrawler(AbstractCrawler):
                 f"[ZhihuCrawler.get_comments] Begin get note id comments {content_item.content_id}"
             )
 
-            # Sleep before fetching comments
-            await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-            utils.logger.info(f"[ZhihuCrawler.get_comments] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds before fetching comments for content {content_item.content_id}")
-
             await self.zhihu_client.get_note_all_comments(
                 content=content_item,
-                crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
-                callback=zhihu_store.batch_update_zhihu_note_comments,
+                crawl_interval=0,
+                callback=create_comment_page_callback(
+                    zhihu_store.batch_update_zhihu_note_comments
+                ),
             )
 
     async def get_creators_and_notes(self) -> None:

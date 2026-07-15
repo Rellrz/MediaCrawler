@@ -279,6 +279,69 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 rich_help_panel="Performance Configuration",
             ),
         ] = config.MAX_CONCURRENCY_NUM,
+        comment_interval_min: Annotated[
+            float,
+            typer.Option(
+                "--comment_interval_min",
+                min=0,
+                help="Minimum delay between storing comments, in seconds",
+                rich_help_panel="Performance Configuration",
+            ),
+        ] = config.COMMENT_INTERVAL_MIN,
+        comment_interval_max: Annotated[
+            float,
+            typer.Option(
+                "--comment_interval_max",
+                min=0,
+                help="Maximum delay between storing comments, in seconds",
+                rich_help_panel="Performance Configuration",
+            ),
+        ] = config.COMMENT_INTERVAL_MAX,
+        page_interval_min: Annotated[
+            float,
+            typer.Option(
+                "--page_interval_min",
+                min=0,
+                help="Minimum delay after each comment page, in seconds",
+                rich_help_panel="Performance Configuration",
+            ),
+        ] = config.PAGE_INTERVAL_MIN,
+        page_interval_max: Annotated[
+            float,
+            typer.Option(
+                "--page_interval_max",
+                min=0,
+                help="Maximum delay after each comment page, in seconds",
+                rich_help_panel="Performance Configuration",
+            ),
+        ] = config.PAGE_INTERVAL_MAX,
+        periodic_pause_page_count: Annotated[
+            int,
+            typer.Option(
+                "--periodic_pause_page_count",
+                min=1,
+                help="Number of comment pages between longer pauses",
+                rich_help_panel="Performance Configuration",
+            ),
+        ] = config.PERIODIC_PAUSE_PAGE_COUNT,
+        periodic_pause_min: Annotated[
+            float,
+            typer.Option(
+                "--periodic_pause_min",
+                min=0,
+                help="Minimum periodic pause, in seconds",
+                rich_help_panel="Performance Configuration",
+            ),
+        ] = config.PERIODIC_PAUSE_MIN,
+        periodic_pause_max: Annotated[
+            float,
+            typer.Option(
+                "--periodic_pause_max",
+                min=0,
+                help="Maximum periodic pause, in seconds",
+                rich_help_panel="Performance Configuration",
+            ),
+        ] = config.PERIODIC_PAUSE_MAX,
         save_data_path: Annotated[
             str,
             typer.Option(
@@ -320,6 +383,16 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         enable_headless = _to_bool(headless)
         enable_ip_proxy_value = _to_bool(enable_ip_proxy)
         init_db_value = init_db.value if init_db else None
+        speed_ranges = (
+            ("comment interval", comment_interval_min, comment_interval_max),
+            ("page interval", page_interval_min, page_interval_max),
+            ("periodic pause", periodic_pause_min, periodic_pause_max),
+        )
+        for label, minimum, maximum in speed_ranges:
+            if minimum > maximum:
+                raise typer.BadParameter(
+                    f"{label} minimum cannot exceed its maximum"
+                )
 
         # Parse specified_id and creator_id into lists
         specified_id_list = [id.strip() for id in specified_id.split(",") if id.strip()] if specified_id else []
@@ -340,6 +413,13 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.COOKIES = cookies
         config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = max_comments_count_singlenotes
         config.MAX_CONCURRENCY_NUM = max_concurrency_num
+        config.COMMENT_INTERVAL_MIN = comment_interval_min
+        config.COMMENT_INTERVAL_MAX = comment_interval_max
+        config.PAGE_INTERVAL_MIN = page_interval_min
+        config.PAGE_INTERVAL_MAX = page_interval_max
+        config.PERIODIC_PAUSE_PAGE_COUNT = periodic_pause_page_count
+        config.PERIODIC_PAUSE_MIN = periodic_pause_min
+        config.PERIODIC_PAUSE_MAX = periodic_pause_max
         config.SAVE_DATA_PATH = save_data_path
         config.ENABLE_IP_PROXY = enable_ip_proxy_value
         config.IP_PROXY_POOL_COUNT = ip_proxy_pool_count
@@ -390,6 +470,13 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             specified_id=specified_id,
             creator_id=creator_id,
             max_comments_count_singlenotes=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+            comment_interval_min=config.COMMENT_INTERVAL_MIN,
+            comment_interval_max=config.COMMENT_INTERVAL_MAX,
+            page_interval_min=config.PAGE_INTERVAL_MIN,
+            page_interval_max=config.PAGE_INTERVAL_MAX,
+            periodic_pause_page_count=config.PERIODIC_PAUSE_PAGE_COUNT,
+            periodic_pause_min=config.PERIODIC_PAUSE_MIN,
+            periodic_pause_max=config.PERIODIC_PAUSE_MAX,
         )
 
     command = typer.main.get_command(app)

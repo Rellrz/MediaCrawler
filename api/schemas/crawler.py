@@ -18,7 +18,7 @@
 
 from enum import Enum
 from typing import Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PlatformEnum(str, Enum):
@@ -75,6 +75,25 @@ class CrawlerStartRequest(BaseModel):
     save_option: SaveDataOptionEnum = SaveDataOptionEnum.JSONL
     cookies: str = ""
     headless: bool = False
+    comment_interval_min: float = Field(default=0, ge=0)
+    comment_interval_max: float = Field(default=0, ge=0)
+    page_interval_min: float = Field(default=2, ge=0)
+    page_interval_max: float = Field(default=5, ge=0)
+    periodic_pause_page_count: int = Field(default=5, ge=1)
+    periodic_pause_min: float = Field(default=20, ge=0)
+    periodic_pause_max: float = Field(default=40, ge=0)
+
+    @model_validator(mode="after")
+    def validate_crawl_speed_ranges(self):
+        ranges = (
+            ("comment_interval", self.comment_interval_min, self.comment_interval_max),
+            ("page_interval", self.page_interval_min, self.page_interval_max),
+            ("periodic_pause", self.periodic_pause_min, self.periodic_pause_max),
+        )
+        for name, minimum, maximum in ranges:
+            if minimum > maximum:
+                raise ValueError(f"{name}_min cannot exceed {name}_max")
+        return self
 
 
 class CrawlerStatusResponse(BaseModel):

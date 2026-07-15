@@ -233,6 +233,15 @@ class CrawlerManager:
             cmd.extend(["--cookies", config.cookies])
 
         cmd.extend(["--headless", "true" if config.headless else "false"])
+        cmd.extend(["--comment_interval_min", str(config.comment_interval_min)])
+        cmd.extend(["--comment_interval_max", str(config.comment_interval_max)])
+        cmd.extend(["--page_interval_min", str(config.page_interval_min)])
+        cmd.extend(["--page_interval_max", str(config.page_interval_max)])
+        cmd.extend(
+            ["--periodic_pause_page_count", str(config.periodic_pause_page_count)]
+        )
+        cmd.extend(["--periodic_pause_min", str(config.periodic_pause_min)])
+        cmd.extend(["--periodic_pause_max", str(config.periodic_pause_max)])
 
         return cmd
 

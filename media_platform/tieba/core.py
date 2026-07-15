@@ -38,6 +38,7 @@ from proxy.proxy_ip_pool import IpInfoModel, ProxyIpPool, create_ip_pool
 from store import tieba as tieba_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.comment_crawl_throttle import create_comment_page_callback
 from var import crawler_type_var, source_keyword_var
 
 from .client import BaiduTieBaClient
@@ -343,14 +344,12 @@ class TieBaCrawler(AbstractCrawler):
                 f"[BaiduTieBaCrawler.get_comments] Begin get note id comments {note_detail.note_id}"
             )
 
-            # Sleep before fetching comments
-            await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-            utils.logger.info(f"[TieBaCrawler.get_comments_async_task] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds before fetching comments for note {note_detail.note_id}")
-
             await self.tieba_client.get_note_all_comments(
                 note_detail=note_detail,
-                crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
-                callback=tieba_store.batch_update_tieba_note_comments,
+                crawl_interval=0,
+                callback=create_comment_page_callback(
+                    tieba_store.batch_update_tieba_note_comments
+                ),
                 max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
             )
 

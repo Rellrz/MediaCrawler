@@ -42,6 +42,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import weibo as weibo_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.comment_crawl_throttle import create_comment_page_callback
 from var import crawler_type_var, source_keyword_var
 
 from .client import WeiboClient
@@ -257,14 +258,12 @@ class WeiboCrawler(AbstractCrawler):
             try:
                 utils.logger.info(f"[WeiboCrawler.get_note_comments] begin get note_id: {note_id} comments ...")
 
-                # Sleep before fetching comments
-                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                utils.logger.info(f"[WeiboCrawler.get_note_comments] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds before fetching comments for note {note_id}")
-
                 await self.wb_client.get_note_all_comments(
                     note_id=note_id,
-                    crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,  # Use fixed interval instead of random
-                    callback=weibo_store.batch_update_weibo_note_comments,
+                    crawl_interval=0,
+                    callback=create_comment_page_callback(
+                        weibo_store.batch_update_weibo_note_comments
+                    ),
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
             except DataFetchError as ex:

@@ -88,7 +88,6 @@ def test_comment_pagination_stops_at_requested_count(monkeypatch):
         sleep_delays.append(delay)
 
     monkeypatch.setattr(asyncio, "sleep", record_sleep)
-    monkeypatch.setattr("media_platform.jd.client.random.uniform", lambda low, high: low)
     page = FakePage(
         [
             comment_response(0),
@@ -100,7 +99,7 @@ def test_comment_pagination_stops_at_requested_count(monkeypatch):
 
     assert len(comments) == 15
     assert [call["pageNumber"] for call in page.calls] == [1, 2]
-    assert sleep_delays == [3.0]
+    assert sleep_delays == []
 
 
 def test_comment_pagination_starts_from_configured_page(monkeypatch):
@@ -184,14 +183,13 @@ def test_transient_request_error_retries_with_exponential_backoff(monkeypatch):
     assert sleep_delays == [5.0, 10.0]
 
 
-def test_batch_cooldown_is_added_every_five_pages(monkeypatch):
+def test_comment_client_does_not_add_unconfigured_page_delays(monkeypatch):
     sleep_delays = []
 
     async def record_sleep(delay):
         sleep_delays.append(delay)
 
     monkeypatch.setattr(asyncio, "sleep", record_sleep)
-    monkeypatch.setattr("media_platform.jd.client.random.uniform", lambda low, high: low)
     page = FakePage(
         [comment_response(index * 10, max_page=6) for index in range(6)]
     )
@@ -199,7 +197,7 @@ def test_batch_cooldown_is_added_every_five_pages(monkeypatch):
     comments = asyncio.run(JdClient(page).get_comments("123", 60, 1))
 
     assert len(comments) == 60
-    assert sleep_delays == [3.0, 3.0, 3.0, 3.0, 18.0]
+    assert sleep_delays == []
 
 
 def test_comment_api_verification_stops_safely():

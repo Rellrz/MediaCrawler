@@ -21,6 +21,7 @@ import config
 from base.base_crawler import AbstractCrawler
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.comment_crawl_throttle import create_comment_page_callback
 from var import crawler_type_var
 
 from .client import TaobaoClient, TaobaoDataFetchError
@@ -77,7 +78,9 @@ class TaobaoCrawler(AbstractCrawler):
                         product.biz_code,
                         config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                         config.START_PAGE,
-                        callback=taobao_store.batch_update_taobao_comments,
+                        callback=create_comment_page_callback(
+                            taobao_store.batch_update_taobao_comments
+                        ),
                     )
                     if client.last_stop_reason:
                         utils.logger.warning(

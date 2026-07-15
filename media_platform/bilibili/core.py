@@ -45,6 +45,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import bilibili as bilibili_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.comment_crawl_throttle import create_comment_page_callback
 from var import crawler_type_var, source_keyword_var
 
 from .client import BilibiliClient
@@ -347,13 +348,13 @@ class BilibiliCrawler(AbstractCrawler):
         async with semaphore:
             try:
                 utils.logger.info(f"[BilibiliCrawler.get_comments] begin get video_id: {video_id} comments ...")
-                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                utils.logger.info(f"[BilibiliCrawler.get_comments] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after fetching comments for video {video_id}")
                 await self.bili_client.get_video_all_comments(
                     video_id=video_id,
-                    crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
+                    crawl_interval=0,
                     is_fetch_sub_comments=config.ENABLE_GET_SUB_COMMENTS,
-                    callback=bilibili_store.batch_update_bilibili_video_comments,
+                    callback=create_comment_page_callback(
+                        bilibili_store.batch_update_bilibili_video_comments
+                    ),
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
 

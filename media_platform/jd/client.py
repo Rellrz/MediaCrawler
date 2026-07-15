@@ -25,9 +25,6 @@ class JdRiskControlError(JdDataFetchError):
 
 class JdClient:
     PAGE_SIZE = 10
-    PAGE_DELAY_RANGE = (3.0, 8.0)
-    BATCH_SIZE_PAGES = 5
-    BATCH_DELAY_RANGE = (15.0, 30.0)
     MAX_TRANSIENT_RETRIES = 2
     COMMENT_API_BY_HOST = {
         "item.jd.com": "https://api.m.jd.com",
@@ -308,7 +305,6 @@ class JdClient:
         self.last_stop_reason = None
         comments: List[Dict[str, Any]] = []
         page_number = start_page
-        fetched_page_count = 0
         while len(comments) < max_count:
             try:
                 response = await self._get_comment_page_with_retry(
@@ -345,7 +341,6 @@ class JdClient:
             if callback and valid_comments:
                 await callback(sku_id, valid_comments)
             comments.extend(valid_comments)
-            fetched_page_count += 1
 
             max_page = int(response.get("maxPage") or page_number)
             if (
@@ -355,14 +350,6 @@ class JdClient:
             ):
                 break
 
-            request_delay = random.uniform(*self.PAGE_DELAY_RANGE)
-            if fetched_page_count % self.BATCH_SIZE_PAGES == 0:
-                request_delay += random.uniform(*self.BATCH_DELAY_RANGE)
-            utils.logger.info(
-                f"[JdClient] 商品 {sku_id} 第 {page_number} 页已保存，"
-                f"等待 {request_delay:.1f} 秒后继续"
-            )
-            await asyncio.sleep(request_delay)
             page_number += 1
 
         return comments[:max_count]
