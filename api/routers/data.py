@@ -23,12 +23,19 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/data", tags=["data"])
 
 # Data directory
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 SUPPORTED_EXTENSIONS = {".json", ".csv", ".xlsx", ".xls"}
+
+
+class RenameDataFileRequest(BaseModel):
+    """Requested filename stem for a data file."""
+
+    new_name: str
 
 
 def get_file_info(file_path: Path) -> dict:
@@ -114,6 +121,51 @@ async def delete_data_file(file_path: str):
 
     full_path.unlink()
     return {"success": True, "path": str(full_path.relative_to(data_dir))}
+
+
+@router.patch("/files/{file_path:path}")
+async def rename_data_file(file_path: str, request: RenameDataFileRequest):
+    """Rename one supported data file without changing its extension."""
+    data_dir = DATA_DIR.resolve()
+    full_path = (DATA_DIR / file_path).resolve()
+
+    try:
+        full_path.relative_to(data_dir)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    if not full_path.is_file():
+        raise HTTPException(status_code=400, detail="Not a file")
+    if full_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    new_name = request.new_name
+    if not new_name.strip():
+        raise HTTPException(status_code=400, detail="File name cannot be empty")
+    if new_name != Path(new_name).name or "/" in new_name or "\\" in new_name:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    if new_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+
+    target_path = full_path.with_name(f"{new_name}{full_path.suffix}")
+    if target_path == full_path:
+        raise HTTPException(status_code=400, detail="File name is unchanged")
+    if target_path.exists():
+        raise HTTPException(status_code=409, detail="A file with this name already exists")
+
+    try:
+        full_path.rename(target_path)
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Unable to rename file: {exc}") from exc
+
+    return {
+        "success": True,
+        "old_path": str(full_path.relative_to(data_dir)),
+        "path": str(target_path.relative_to(data_dir)),
+        "name": target_path.name,
+    }
 
 
 @router.get("/files/{file_path:path}")
