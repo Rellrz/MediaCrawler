@@ -31,7 +31,7 @@
 
 ## 📖 项目简介
 
-一个功能强大的**多平台自媒体数据采集工具**，支持小红书、抖音、快手、B站、微博、贴吧、知乎等主流平台的公开信息抓取。
+一个功能强大的**多平台公开数据采集工具**，支持小红书、抖音、快手、B站、微博、贴吧、知乎等自媒体平台，以及京东、淘宝和天猫的商品评论采集。
 
 ### 🔧 技术原理
 
@@ -41,15 +41,19 @@
 
 
 ## ✨ 功能特性
-| 平台   | 关键词搜索 | 指定帖子ID爬取 | 二级评论 | 指定创作者主页 | 登录态缓存 | IP代理池 | 生成评论词云图 |
-| ------ | ---------- | -------------- | -------- | -------------- | ---------- | -------- | -------------- |
-| 小红书 | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| 抖音   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| 快手   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| B 站   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| 微博   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| 贴吧   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| 知乎   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
+| 平台 | 关键词搜索 | 指定内容/商品链接 | 二级评论 | 指定创作者主页 | 登录态缓存 | IP代理池 | 生成评论词云图 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 小红书 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 抖音 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 快手 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| B 站 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 微博 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 贴吧 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 知乎 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 京东 | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| 淘宝/天猫 | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
+
+> 京东、淘宝和天猫当前仅支持 `detail` 模式：传入标准商品链接后，按页采集商品评论。
 
 
 
@@ -152,6 +156,42 @@ uv run main.py --platform xhs --lt qrcode --type detail
 uv run main.py --help
 ```
 
+### 🛒 京东、淘宝和天猫商品评论
+
+电商平台使用 `detail` 模式，`--specified_id` 支持传入一个或多个以英文逗号分隔的标准商品链接。`--start` 设置评论起始页，`--max_comments_count_singlenotes` 设置每个商品最多采集的评论数。
+
+```shell
+# 京东商品评论
+uv run main.py --platform jd --type detail \
+  --specified_id "https://item.jd.com/100012043978.html" \
+  --start 1 --max_comments_count_singlenotes 200
+
+# 京东健康商品链接同样受支持
+uv run main.py --platform jd --type detail \
+  --specified_id "https://item.jingdonghealth.cn/2943746.html"
+
+# 淘宝或天猫商品评论
+uv run main.py --platform tb --type detail \
+  --specified_id "https://detail.tmall.com/item.htm?id=703832297172" \
+  --start 1 --max_comments_count_singlenotes 200
+```
+
+### ⏱️ 评论爬取速度控制
+
+所有平台的评论流程共用随机限速配置。最小值和最大值用于生成每次实际等待时间；达到周期页数时，周期休息会替代该页的普通分页等待。
+
+```shell
+uv run main.py --platform xhs --type search --keywords "编程" \
+  --comment_interval_min 0.5 --comment_interval_max 1.5 \
+  --page_interval_min 3 --page_interval_max 6 \
+  --periodic_pause_page_count 5 \
+  --periodic_pause_min 20 --periodic_pause_max 40
+```
+
+- 单条评论间隔控制逐条保存之间的等待时间；平台接口仍可能按页批量返回评论。
+- 分页间隔控制完成一页评论后继续翻页前的等待时间。
+- 建议使用合理的非零分页间隔，避免高频请求触发平台风控。
+
 <details>
 <summary>🖥️ <strong>WebUI 可视化操作界面</strong></summary>
 
@@ -171,9 +211,10 @@ uv run python -m api.main
 
 #### WebUI 功能特性
 
-- 可视化配置爬虫参数（平台、登录方式、爬取类型等）
+- 可视化配置平台、登录方式、爬取类型、起始页和采集数量
+- 配置单条评论、分页和周期休息的随机等待区间，并在浏览器中记住上次设置
 - 实时查看爬虫运行状态和日志
-- 数据预览和导出
+- 数据文件预览、下载、删除和点击文件名重命名
 
 #### 界面预览
 
@@ -240,6 +281,12 @@ python main.py --help
 ## 💾 数据保存
 
 MediaCrawler 支持多种数据存储方式，包括 CSV、JSON、JSONL、Excel、SQLite 和 MySQL 数据库。
+
+评论按单条持久化：如果后续分页请求失败、出现验证码或触发平台风控，已经成功写入的数据仍会保留。导出文件默认使用以下格式命名：
+
+```text
+平台_模式(detail/search)_类型(content/comment)_日期_具体时间.扩展名
+```
 
 📖 **详细使用说明请查看：[数据存储指南](docs/data_storage_guide.md)**
 
