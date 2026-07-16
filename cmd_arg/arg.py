@@ -48,7 +48,6 @@ class PlatformEnum(str, Enum):
     ZHIHU = "zhihu"
     JD = "jd"
     TAOBAO = "tb"
-    ASK = "ask"
 
 
 class LoginTypeEnum(str, Enum):
@@ -149,7 +148,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             PlatformEnum,
             typer.Option(
                 "--platform",
-                help="Media platform selection (xhs=XiaoHongShu | dy=Douyin | ks=Kuaishou | bili=Bilibili | wb=Weibo | tieba=Baidu Tieba | zhihu=Zhihu | jd=JD | tb=Taobao | ask=120ask)",
+                help="Media platform selection (xhs=XiaoHongShu | dy=Douyin | ks=Kuaishou | bili=Bilibili | wb=Weibo | tieba=Baidu Tieba | zhihu=Zhihu | jd=JD | tb=Taobao)",
                 rich_help_panel="Basic Configuration",
             ),
         ] = _coerce_enum(PlatformEnum, config.PLATFORM, PlatformEnum.XHS),
