@@ -301,6 +301,7 @@ async def get_data_stats():
                     "zhihu",
                     "jd",
                     "tb",
+                    "ask",
                 ]:
                     if platform in rel_path.lower():
                         stats["by_platform"][platform] = stats["by_platform"].get(platform, 0) + 1

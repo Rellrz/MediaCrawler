@@ -67,6 +67,48 @@ class CommentCrawlThrottle:
 
         return result
 
+    async def store_comments(
+        self,
+        callback: CommentCallback,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Persist one comment at a time without counting a completed page."""
+        if not args or not isinstance(args[-1], list):
+            raise TypeError(
+                "comment callback must receive a comment list as its last argument"
+            )
+
+        comments = args[-1]
+        prefix_args = args[:-1]
+        result = None
+        async with self._lock:
+            for index, comment in enumerate(comments):
+                result = await callback(*prefix_args, [comment], **kwargs)
+                if index + 1 < len(comments):
+                    await self._wait(self.comment_interval, "单条评论间隔")
+        return result
+
+    async def wait_between_items(self) -> None:
+        """Apply the configured per-item delay between detail-page requests."""
+        async with self._lock:
+            await self._wait(self.comment_interval, "单条数据间隔")
+
+    async def finish_page(self) -> None:
+        """Count one completed source page and apply its configured delay."""
+        async with self._lock:
+            self.completed_pages += 1
+            if self.completed_pages % self.periodic_page_count == 0:
+                await self._wait(
+                    self.periodic_pause,
+                    f"已完成 {self.completed_pages} 页，周期休息",
+                )
+            else:
+                await self._wait(
+                    self.page_interval,
+                    f"已完成第 {self.completed_pages} 页，分页间隔",
+                )
+
     @staticmethod
     async def _wait(interval: tuple[float, float], reason: str) -> None:
         minimum, maximum = interval

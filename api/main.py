@@ -143,6 +143,7 @@ async def get_platforms():
             {"value": "zhihu", "label": "Zhihu", "icon": "help-circle"},
             {"value": "jd", "label": "JD", "icon": "shopping-cart"},
             {"value": "tb", "label": "Taobao", "icon": "shopping-bag"},
+            {"value": "ask", "label": "有问必答 (120ask)", "icon": "stethoscope"},
         ]
     }
 

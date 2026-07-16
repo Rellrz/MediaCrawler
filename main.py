@@ -36,6 +36,7 @@ import cmd_arg
 import config
 from database import db
 from base.base_crawler import AbstractCrawler
+from media_platform.ask import AskCrawler
 from media_platform.bilibili import BilibiliCrawler
 from media_platform.douyin import DouYinCrawler
 from media_platform.jd import JdCrawler
@@ -51,6 +52,7 @@ from var import crawler_type_var
 
 class CrawlerFactory:
     CRAWLERS: dict[str, Type[AbstractCrawler]] = {
+        "ask": AskCrawler,
         "xhs": XiaoHongShuCrawler,
         "dy": DouYinCrawler,
         "ks": KuaishouCrawler,
