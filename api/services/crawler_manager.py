@@ -20,6 +20,7 @@ import asyncio
 import subprocess
 import signal
 import os
+import uuid
 from typing import Optional, List
 from datetime import datetime
 from pathlib import Path
@@ -34,7 +35,12 @@ class CrawlerManager:
         self._lock = asyncio.Lock()
         self.process: Optional[subprocess.Popen] = None
         self.status = "idle"
+        self.task_id: Optional[str] = None
+        self.outcome: Optional[str] = None
         self.started_at: Optional[datetime] = None
+        self.finished_at: Optional[datetime] = None
+        self.exit_code: Optional[int] = None
+        self.error_message: Optional[str] = None
         self.current_config: Optional[CrawlerStartRequest] = None
         self._log_id = 0
         self._logs: List[LogEntry] = []
@@ -113,6 +119,14 @@ class CrawlerManager:
             # Build command line arguments
             cmd = self._build_command(config)
 
+            self.task_id = uuid.uuid4().hex
+            self.outcome = None
+            self.started_at = datetime.now()
+            self.finished_at = None
+            self.exit_code = None
+            self.error_message = None
+            self.current_config = config
+
             # Log start information
             entry = self._create_log_entry(f"Starting crawler: {' '.join(cmd)}", "info")
             await self._push_log(entry)
@@ -131,8 +145,6 @@ class CrawlerManager:
                 )
 
                 self.status = "running"
-                self.started_at = datetime.now()
-                self.current_config = config
 
                 entry = self._create_log_entry(
                     f"Crawler started on platform: {config.platform.value}, type: {config.crawler_type.value}",
@@ -146,6 +158,7 @@ class CrawlerManager:
                 return True
             except Exception as e:
                 self.status = "error"
+                self._set_terminal_result("failed", error_message=str(e))
                 entry = self._create_log_entry(f"Failed to start crawler: {str(e)}", "error")
                 await self._push_log(entry)
                 return False
@@ -183,7 +196,10 @@ class CrawlerManager:
                 await self._push_log(entry)
 
             self.status = "idle"
-            self.current_config = None
+            self._set_terminal_result(
+                "stopped",
+                exit_code=self.process.returncode if self.process else None,
+            )
 
             # Cancel log reading task
             if self._read_task:
@@ -194,13 +210,43 @@ class CrawlerManager:
 
     def get_status(self) -> dict:
         """Get current status"""
+        duration_seconds = None
+        if self.started_at:
+            end_time = self.finished_at or datetime.now()
+            duration_seconds = round(
+                max(0.0, (end_time - self.started_at).total_seconds()),
+                1,
+            )
         return {
             "status": self.status,
+            "task_id": self.task_id,
+            "outcome": self.outcome,
             "platform": self.current_config.platform.value if self.current_config else None,
             "crawler_type": self.current_config.crawler_type.value if self.current_config else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "error_message": None
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "duration_seconds": duration_seconds,
+            "exit_code": self.exit_code,
+            "error_message": self.error_message,
         }
+
+    def _set_terminal_result(
+        self,
+        outcome: str,
+        exit_code: Optional[int] = None,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Record one terminal result for the active crawler task."""
+        self.outcome = outcome
+        self.finished_at = datetime.now()
+        self.exit_code = exit_code
+        self.error_message = error_message
+
+    def _latest_error_message(self) -> Optional[str]:
+        for entry in reversed(self._logs):
+            if entry.level == "error":
+                return entry.message
+        return None
 
     def _build_command(self, config: CrawlerStartRequest) -> list:
         """Build main.py command line arguments"""
@@ -279,8 +325,17 @@ class CrawlerManager:
                 exit_code = self.process.returncode if self.process else -1
                 if exit_code == 0:
                     entry = self._create_log_entry("Crawler completed successfully", "success")
+                    self._set_terminal_result("completed", exit_code=exit_code)
                 else:
                     entry = self._create_log_entry(f"Crawler exited with code: {exit_code}", "warning")
+                    self._set_terminal_result(
+                        "failed",
+                        exit_code=exit_code,
+                        error_message=(
+                            self._latest_error_message()
+                            or f"Crawler exited with code: {exit_code}"
+                        ),
+                    )
                 await self._push_log(entry)
                 self.status = "idle"
 
@@ -289,6 +344,8 @@ class CrawlerManager:
         except Exception as e:
             entry = self._create_log_entry(f"Error reading output: {str(e)}", "error")
             await self._push_log(entry)
+            self.status = "error"
+            self._set_terminal_result("failed", error_message=str(e))
 
 
 # Global singleton
