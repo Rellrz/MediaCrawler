@@ -63,24 +63,11 @@ async def find_login_qrcode(page: Page, selector: str) -> str:
         return ""
 
 
-async def find_qrcode_img_from_canvas(page: Page, canvas_selector: str) -> str:
-    """
-    find qrcode image from canvas element
-    Args:
-        page:
-        canvas_selector:
+async def find_qrcode_img_from_element(page: Page, element_selector: str) -> str:
+    """Capture a rendered QR-code element and return its base64 image."""
+    qrcode_element = await page.wait_for_selector(element_selector)
+    screenshot = await qrcode_element.screenshot()
 
-    Returns:
-
-    """
-
-    # Wait for Canvas element to load
-    canvas = await page.wait_for_selector(canvas_selector)
-
-    # Take screenshot of Canvas element
-    screenshot = await canvas.screenshot()
-
-    # Convert screenshot to base64 format
     base64_image = base64.b64encode(screenshot).decode('utf-8')
     return base64_image
 

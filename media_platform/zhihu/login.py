@@ -24,7 +24,7 @@ import functools
 import sys
 from typing import Optional
 
-from playwright.async_api import BrowserContext, Page
+from playwright.async_api import BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 from tenacity import (RetryError, retry, retry_if_result, stop_after_attempt,
                       wait_fixed)
 
@@ -34,6 +34,9 @@ from tools import utils
 
 
 class ZhiHuLogin(AbstractLogin):
+
+    LOGIN_URL = "https://www.zhihu.com/signin"
+    QRCODE_SELECTOR = ".Qrcode-qrcode"
 
     def __init__(self,
                  login_type: str,
@@ -81,16 +84,20 @@ class ZhiHuLogin(AbstractLogin):
     async def login_by_qrcode(self):
         """login zhihu website and keep webdriver login state"""
         utils.logger.info("[ZhiHu.login_by_qrcode] Begin login zhihu by qrcode ...")
-        qrcode_img_selector = "canvas.Qrcode-qrcode"
-        # find login qrcode
-        base64_qrcode_img = await utils.find_qrcode_img_from_canvas(
-            self.context_page,
-            canvas_selector=qrcode_img_selector
-        )
+        await self.context_page.goto(self.LOGIN_URL, wait_until="domcontentloaded")
+
+        try:
+            base64_qrcode_img = await utils.find_qrcode_img_from_element(
+                self.context_page,
+                element_selector=self.QRCODE_SELECTOR,
+            )
+        except PlaywrightTimeoutError as exc:
+            raise RuntimeError(
+                "知乎登录二维码加载超时，请检查登录页是否出现验证码、网络错误或访问限制"
+            ) from exc
+
         if not base64_qrcode_img:
-            utils.logger.info("[ZhiHu.login_by_qrcode] login failed , have not found qrcode please check ....")
-            if not base64_qrcode_img:
-                sys.exit()
+            raise RuntimeError("知乎登录页未生成可用的二维码")
 
         # show login qrcode
         # fix issue #12
