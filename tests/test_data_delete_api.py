@@ -6,11 +6,26 @@
 # Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
 
 import asyncio
+import csv
 
 import pytest
 from fastapi import HTTPException
 
 from api.routers import data as data_router
+
+
+def test_csv_record_count_ignores_embedded_newlines(tmp_path, monkeypatch):
+    monkeypatch.setattr(data_router, "DATA_DIR", tmp_path)
+    file_path = tmp_path / "xhs_search_content.csv"
+    with file_path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=["note_id", "desc"])
+        writer.writeheader()
+        writer.writerow({"note_id": "1", "desc": "第一行\n第二行\n第三行"})
+        writer.writerow({"note_id": "2", "desc": "普通正文"})
+
+    file_info = data_router.get_file_info(file_path)
+
+    assert file_info["record_count"] == 2
 
 
 def test_delete_supported_data_file(tmp_path, monkeypatch):

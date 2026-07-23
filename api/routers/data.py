@@ -16,6 +16,7 @@
 # 详细许可条款请参阅项目根目录下的LICENSE文件。
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
+import csv
 import os
 import json
 from pathlib import Path
@@ -51,8 +52,10 @@ def get_file_info(file_path: Path) -> dict:
                 if isinstance(data, list):
                     record_count = len(data)
         elif file_path.suffix == ".csv":
-            with open(file_path, "r", encoding="utf-8") as f:
-                record_count = sum(1 for _ in f) - 1  # Subtract header row
+            with open(file_path, "r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Skip header row.
+                record_count = sum(1 for _ in reader)
     except Exception:
         pass
 
